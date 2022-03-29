@@ -1,0 +1,329 @@
+---
+title: "Summative assignment for ASML Regression"
+author: "Zhaocheng Li nwds29"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+  word_document: default
+  html_notebook:
+    df_print: paged
+---
+
+
+# General Instructions
+
+Please go through the R notebook below, and carry out the requested tasks. You will provide all your answers directly into this .Rmd file. Add code into the R chunks where requested. You can create new chunks where required. Where text answers are requested, please add them directly into this document, typically below the R chunks, using R Markdown syntax as adequate.
+
+At the end, you will submit both your worked .Rmd file, and a `knitted' PDF version, through DUO.
+
+**Important**: Please ensure carefully whether all chunks compile, and also check in the knitted PDF whether all R chunks did *actually* compile, and all images that you would like to produce have *actually* been generated.  **An R chunk which does not compile will give zero marks, and a picture which does not exist will give zero marks, even if some parts of the required code are correct.**
+
+**Note**: It is appreciated that some of the requested analyses requires running R code which is not deterministic. So, you will not have full control over the output that is finally generated in the knitted document. This is fine. It is clear that the methods under investigation carry uncertainty, which is actually part of the problem tackled in this assignment. Your analysis should, however, be robust enough so that it stays in essence correct under repeated execution of your data analysis.
+
+# Reading in data
+
+We consider data from an industrial melter system. The melter is part of a disposal procedure, where a powder (waste material) is clad in glass. The melter vessel is
+continuously filled with powder, and raw glass is discretely introduced in the form of glass frit. This binary composition is heated by  induction coils, positioned around the melter vessel. Resulting from this heating procedure, the glass becomes
+molten homogeneously [(Liu et al, 2008)](https://aiche.onlinelibrary.wiley.com/doi/full/10.1002/aic.11526).
+
+Measurements of 15 temperature sensors `temp1`, ..., `temp15` (in $^{\circ} C$), the power in four
+induction coils `ind1`,...,  `ind4`,  the `voltage`, and the `viscosity` of the molten glass, were taken every 5 minutes. The sample size available for our analysis is $n=900$.
+
+We use the following R chunk to read the data in
+
+```{r}
+melter<-read.table("http://maths.dur.ac.uk/~dma0je/Data/melter.dat", header=TRUE)
+
+```
+
+If this has gone right, then the following code
+```{r}
+is.data.frame(melter)
+dim(melter)
+```
+
+should tell you that `melter` is a data frame of dimension $900 \times 21$. Otherwise something has gone wrong, and you need to start again.
+
+To get more familiar with the data frame, please also execute
+
+```{r}
+head(melter)
+colnames(melter)
+boxplot(melter)
+```
+
+
+# Task 1: Principal component analysis (10 marks)
+
+We consider initially only the 15 variables representing the temperature sensors. Please create a new data frame, called `Temp`, which contains only these 15 variables. Then carry out a principal component analysis. (Use your judgement on whether, for this purpose,  the temperature variables require scaling or not). Produce a screeplot, and also answer the following questions: How many principal components are needed to capture 90% of the total variation? How many are needed to capture 98%?
+
+**Answer:**
+
+```{r}
+# ---
+Temp <- melter[,7:21]
+#PCA
+temp.pca <- prcomp(Temp)
+summary(temp.pca)
+(temp.pca$sdev^2)/sum(temp.pca$sdev^2)
+screeplot(temp.pca, xlab = "Number of Finished PCAs")
+```
+Refer to the figure above, since 0.6401217055+0.1658093667+0.0711144442+0.0584146074 = 0.935460124, which reaches 90% of the total variation, so we need first 4 components to capture 90% total variation. Further 0.6401217055+0.1658093667+0.0711144442+0.0584146074+0.0192529121+0.0106609610+0.0093199980+0.0075221522 = 0.982216147, which reaches 98% of the total variation, hence we need first 8 components to capture 98% total variation.
+
+
+
+# Task 2: Multiple linear regression (20 marks)
+
+We consider from now on, and for the remainder of this assignment, `viscosity` as the response variable.
+
+Fit a linear regression model, with `viscosity` as response variable, and all other variables as predictors, and  produce the `summary` output of the fitted model. In this task, we are mainly interested in the standard errors of the estimated coefficients. Create a vector, with name `melter.fit.sd`, which contains the standard errors of all estimated coefficients, except the intercept. (So, this vector should have length 20). Then produce a `barplot` of these standard errors (where the height of each bar indicates the value of the standard error of the respective coefficients). Please use blue color to fill the bars of the barplot.
+
+**Answer:**
+
+```{r}
+melter.fit <- lm(viscosity~., data=melter)
+A <- summary(melter.fit)
+melter.fit.sd <- A$coefficients[2:21,2]
+melter.fit.sd
+
+barplot(melter.fit.sd, col="blue", main="melter.fit.sd Plot")
+legend("topright",legend="melter.fit.sd", fill="blue")
+```
+
+Now repeat this analysis, but this time using a Bayesian linear regression. Use adequate methodology to fit the Bayesian version of the linear model considered above.  It is your choice whether you would like to employ ready-to-use R functions which carry out this task for you, or whether you would like to implement this procedure from scratch, for instance using `jags`.
+
+In either case, you need to be able to extract posterior draws of the estimated parameters from the fitted object, and compute their standard deviations. Please save these standard deviations, again excluding that one for the intercept, into a vector `melter.bayes.sd`.  Produce now a barplot which displays both of `melter.fit.sd` and `melter.bayes.sd` in one plot, and allows a direct comparison  of the frequentist and Bayesian standard errors (by having the corresponding bars for both methods directly side-by-side, with the Bayesian ones in red color). The barplot should be equipped with suitable labels and legends to enable good readability.
+
+Comment on the outcome.
+
+**Answer**:
+
+```{r}
+#install.packages("LearnBayes")
+require(LearnBayes)
+X=cbind(1, as.matrix(melter[, 2:21]))
+head(X)
+
+bayes.fit <- blinreg(melter$viscosity,X,1000)
+
+par(mfrow=c(2,2), cex=0.5)
+hist(bayes.fit$beta[,2])
+hist(bayes.fit$beta[,3])
+hist(bayes.fit$beta[,4])
+hist(bayes.fit$sigma)
+
+round(colMeans(bayes.fit$beta), digits=2)
+melter.bayes.sd <- apply(bayes.fit$beta[, 2:21], 2, sd)
+melter.bayes.sd
+barplot(c(melter.fit.sd, melter.bayes.sd), col=c("blue","red"))
+legend("topright",legend=c("Frequentist","Bayesian LR"),
+       fill=c("blue","red"))
+
+```
+
+
+
+# Task 3: The Lasso (20 marks)
+
+We would like to reduce the dimension of the currently 20-dimensional space of predictors. We employ the LASSO to carry out this task. Carry out this analysis, which should feature the following elements:
+
+ * the trace plot of the fitted coefficients, as a function of $\log(\lambda)$, with $\lambda$ denoting the penalty parameter;
+ * a graphical illustration of the cross-validation to find $\lambda$;
+ * the chosen value of $\lambda$ according to the `1-se` criterion, and a brief explanation of what this criterion actually does;
+ * the fitted coefficients according to this choice of $\lambda$.
+
+**Answer:**
+
+```{r}
+#install.package("glmnet")
+require(glmnet)
+melter1.fit <- glmnet(melter[,2:21], melter$viscosity, alpha=1 )
+plot(melter1.fit, xvar="lambda", cex.axis=1, cex.lab=1.3, cex=1.1)
+
+#Cross-Validation
+set.seed(2)
+melter.cv = cv.glmnet(as.matrix(melter[,2:21]), melter$viscosity, alpha=1 )
+plot(melter.cv)
+melter.cv
+
+lambda = melter.cv$lambda.1se #1个standard error
+lambda
+
+melter.fitlasso <- coef(melter.cv, s = "lambda.1se")
+melter.fitlasso
+```
+According to the outcome of `1-se` criterion, we could see that the criterion picks the relative minimum at log(lambda) value is close to but lower than 2. This is because the criterion does not drop other variables when picking up the minimum value of log(lambda), and therefore it could only pick the value at 1 standard error, which is nearby 2.
+
+
+Next, carry out a Bayesian analysis of the lasso.  Visualize the full posterior distributions of all coefficients (except the intercept) in terms of boxplots, and also visualize the resulting standard errors of the coefficients, again using a barplot (with red bars).
+
+Give an interpretation of the results, especially in terms of the evidence that this analysis gives in terms of inclusion/non-inclusion of certain variables.
+
+**Answer:**
+
+```{r}
+#install.packages("monomvn")
+require(monomvn)
+X <- cbind(1, as.matrix(melter[, 
+                        (c(1,3,7,9,10,11,12,13,14,17,19)+1)]))
+melter.blas <- blasso(X,melter$viscosity)
+summary(melter.blas)
+plot(melter.blas, burnin=200)
+
+bsd <- apply(melter.blas$beta, 2, sd)
+
+barplot(bsd, col="red")
+legend("topright",legend="Bayes-Lasso",fill="red")
+
+```
+
+
+The second varibale Xind2 of the box plot shows a high standard error value, which implies the variance is very large. The bar plot shows the similar characteristics to the box plot with a high variance for Xind2 as well. This suggests both outcomes of box plot and bar plot are consistent. Further, the Bayesian analysis of the lasso carries out the variables with high standard error, which means these variables might have high fluctuations and they are more likely to significantly affect the viscosity. 
+
+
+# Task 4: Bootstrap (20 marks)
+
+A second possibility to assess uncertainty of any estimator is the Bootstrap. Implement a nonparametric bootstrap procedure to assess the uncertainty of your frequentist lasso fit from Task 3.
+
+Produce boxplots of the full bootstrap distributions for all coefficients (similar as in Task 3).
+
+Then, add (green) bars with the resulting standard errors to the bar plot produced in Task 3, allowing for comparison between Bootstrap and Bayesian standard errors. Interpret the results.
+
+**Answer:**
+
+
+```{r}
+library("dplyr")
+name = c(0:20)
+table_collection = data.frame("name"=0:20)
+for (i in 1:50){
+  melter.cv1 = cv.glmnet(as.matrix(melter[,2:21]),
+                         melter$viscosity, alpha = 1)
+  lambda_1se = coef(melter.cv1, s="lambda.1se")
+  
+  name = lambda_1se@i
+  fit_lasso = lambda_1se@x
+  table_temp = data.frame(name, fit_lasso)
+  table_collection = left_join(table_collection, table_temp, 
+                                by = "name")
+}
+
+lasso_beta <- t(table_collection[2:21, 2:51])
+boxplot(lasso_beta)
+
+lasso_bootstrap_sd <- apply(lasso_beta, 2, sd, na.rm = TRUE)
+lasso_bootstrap_sd
+barplot(c(lasso_bootstrap_sd, bsd), 
+        col=c("green","red"))
+legend("topright",
+       legend=c("Bootstrap SE","Bayes-Lasso"), cex=0.7,
+       fill=c("green", "red"))
+
+
+```
+Interpretation and comparison: In general, Bootstrap selects variables with higher  standard error than Bayes Analysis with relatively lower standard error. This implies that Bootstrap selects a wider range of variables that would have impacts on the viscosity than Bayesian. What's more, Bootstrap also shows the similar distribution of standard error to Bayesian with first several variables having smaller standard error, and the rests are relatively higher. This suggests that the outcomes of Bootstrap and Bayes Analysis of Lasso are consistent in estimating the standard error of selected variables. Therefore by Bootstrap we know Bayes Analysis of Lasso fit is accurate. 
+
+
+
+# Task 5: Model choice (10 marks)
+
+Based on all considerations and analyses carried out so far, decide on a suitable model that you would present to a client, if you had been the statistical consultant.
+
+Formulate the model equation in mathematical notation.
+
+Refit your selected model using ordinary Least Squares. Carry out some residual diagnostics for this fitted model, and display the results. Discuss these briefly.
+
+**Answer:**
+
+```{r}
+#I will use the model of Bayesian Analysis of Lasso from Task 3 called "melter.blas", and I will refit it to new model as "T5".
+
+T5 <- lm(melter.blas$y~melter.blas$X, data=melter)
+C <- summary(T5)
+C
+T5.sd <- C$coefficients[2:12,2]
+
+#plot comparison between refitted Bayesian Analysis of Lasso's model and the original Bayesian Analysis of Lasso's model:
+barplot(c(T5.sd, bsd), col=c("yellow","red"))
+legend("topright",
+       legend=c("Bayes-Lasso-Refit","Bayes-Lasso"), cex=0.7,
+       fill=c("yellow", "red"))
+
+#residual diagnostics:
+par(mfrow=c(1,2), cex=0.6)
+plot(T5$residuals)
+plot(T5$fitted, T5$residuals)
+
+```
+Refer to the figure above, from the barplot we could see that refitted Bayesian Analysis of Lasso's model "T5" has variables with relatively lower standard error compared with the original "melter.blas" model. This implies that the refitted model has variables that might not be significantly affect the viscosity. What's more, it is obvious to see that there exists a "trumpet" shape for the refitted model, which means the model might have been overfitted. As we can see, the residual diagnostics shows that the R square is around 0.2998, which is small and far away from 1.0. A good fitted model is supposed to have the value of R square as close to 1 as possible. This suggests that this model T5 does not fit the data very well, and therefore needs some improvement(continue in Task 6).
+
+
+We will refer to the model produced in this task as (T5) henceforth.
+
+
+# Task 6: Extensions (20 marks)
+
+For this task, take the model (T5) as the starting point.  Then consider extensions of your model in TWO of the following THREE directions (of your choice).
+
+
+(1) Replace the temperature sensor variables in model (T5) by an adequate number of principal components (see Task 1).
+
+(2) Replace the `voltage`, and the remaining induction variables, by nonparametric terms.
+
+(3) Consider a transformation of the response variable `viscosity`.
+
+Each time, report the fitted model through adequate means. Discuss whether the corresponding extension is useful, giving quantitative or graphical evidence where possible.
+
+Give a short discussion on whether any of your extensions have led to an actual improvement compared to model (T5).
+
+**Answer:**
+
+(1)
+```{r}
+#PCA
+temp1.pca <- prcomp(T5$model)
+summary(temp1.pca)
+(temp1.pca$sdev^2)/sum(temp1.pca$sdev^2)
+plot(temp1.pca, xlab = "Number of Finished PCAs")
+
+```
+
+(2)
+```{r}
+#2.1:nonparametric additive model by kernels
+#install.packages("gam")
+require(gam)
+new.gam <- gam(viscosity~ lo(voltage) + lo(ind2) + lo(temp2) 
+              + lo(temp4) + lo(temp5) + lo(temp6) + lo(temp7) 
+              + lo(temp8) + lo(temp9) + lo(temp12) 
+              + lo(temp14), data=melter)
+plot(new.gam)
+summary(new.gam)
+```
+
+```{r}
+#2.1:nonparametric additive model by splines
+new.gam2 <- gam(viscosity~ s(voltage) + s(ind2) + s(temp2) 
+              + s(temp4) + s(temp5) + s(temp6) + s(temp7) 
+              + s(temp8) + s(temp9) + s(temp12) 
+              + s(temp14), data=melter)
+plot(new.gam2)
+summary(new.gam2)
+```
+
+
+(3):
+```{r I use log transformation here:}
+require(MASS)
+logtr_T5.refit <-logtrans(T5)
+summary(logtr_T5.refit)
+par(mfrow=c(1,2), cex=0.6)
+na.omit(logtr_T5.refit)
+plot(logtr_T5.refit$y)
+plot(logtr_T5.refit$x, logtr_T5.refit$y)
+#
+```
+Refer to the three extensions above, from extension (1) we do the PCA for the model T5 again, and we could see that this time we only need first 2 components to reach 90% proportion of total variation (91.14%) compared with 4 components needed from Task 1. And we only need first 4 components to reach 98% proportion of total variation (98.18%) (vs. 8 components needed from Task 1). This indicates that T5 is improved to be easier and faster in reducing the dimensions of the data.
+
+By residual diagnostics of Task 5, T5 model shows that variables ind2 and temp9 are significant in affecting the viscosity. However, in extension (2), we could see that through the ANOVA test for nonparametric effects of nonparametric models by kernal, variables voltage, ind2, temp5, temp6, and temp9 are significant. In addition, the ANOVA test for parametric effects by kernal, variables voltage, ind2, temp2, temp5, temp6, and temp8 are significant.This suggests that variables voltage, ind2, temp2, temp5, temp6, temp8, and temp9 carry some variable with linear terms being used for temp2 and temp8, and nonlinear terms being used for temp9. The ind2 could apply for both linear and nonlinear terms. Overall, the new nonparametric model of T5 is able to select more variables that are significant in affecting the viscosity, which is a better improvement of T5.
